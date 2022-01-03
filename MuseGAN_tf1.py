@@ -1,13 +1,13 @@
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Reshape, Lambda, Activation, BatchNormalization, LeakyReLU, Dropout, ZeroPadding2D, UpSampling2D, Reshape, Permute, RepeatVector, Concatenate, Conv3D
-#from tensorflow.keras.layers.merge import _Merge
-#from tensorflow.keras.layers.merge import _merge
 
-from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras import backend as K
-from tensorflow.keras.optimizers import Adam, RMSprop
-from tensorflow.keras.callbacks import ModelCheckpoint 
-from tensorflow.keras.utils import plot_model
-from tensorflow.keras.initializers import RandomNormal
+from keras.layers import Input, Conv2D, Flatten, Dense, Conv2DTranspose, Reshape, Lambda, Activation, BatchNormalization, LeakyReLU, Dropout, ZeroPadding2D, UpSampling2D, Reshape, Permute, RepeatVector, Concatenate, Conv3D
+from keras.layers.merge import _Merge
+
+from keras.models import Model, Sequential
+from keras import backend as K
+from keras.optimizers import Adam, RMSprop
+from keras.callbacks import ModelCheckpoint 
+from keras.utils import plot_model
+from keras.initializers import RandomNormal
 
 from functools import partial
 
@@ -16,35 +16,21 @@ import json
 import os
 import pickle
 import matplotlib.pyplot as plt
-import tensorflow as tf
-import tensorflow.keras.layers
 
 from music21 import midi
 from music21 import note, stream, duration, tempo
 
 
 
-#class RandomWeightedAverage(_Merge):
-#    def __init__(self, batch_size):
-#        super().__init__()
-#        self.batch_size = batch_size
-#    """Provides a (random) weighted average between real and generated image samples"""
-#    def _merge_function(self, inputs):
-#        alpha = K.random_uniform((self.batch_size, 1, 1, 1, 1))
-#        return (alpha * inputs[0]) + ((1 - alpha) * inputs[1])
-
-class RandomWeightedAverage(tf.keras.layers.Layer):
+class RandomWeightedAverage(_Merge):
     def __init__(self, batch_size):
         super().__init__()
         self.batch_size = batch_size
-
-    def call(self, inputs, **kwargs):
-        alpha = tf.random.uniform((self.batch_size, 1, 1, 1, 1))
+    """Provides a (random) weighted average between real and generated image samples"""
+    def _merge_function(self, inputs):
+        alpha = K.random_uniform((self.batch_size, 1, 1, 1, 1))
         return (alpha * inputs[0]) + ((1 - alpha) * inputs[1])
 
-    def compute_output_shape(self, input_shape):
-        return input_shape[0]
-    
 class MuseGAN():
     def __init__(self
         , input_dim
@@ -219,8 +205,7 @@ class MuseGAN():
 
         # CHORDS -> TEMPORAL NETWORK
         self.chords_tempNetwork = self.TemporalNetwork()
-#        self.chords_tempNetwork.name = 'temporal_network'
-        self.chords_tempNetwork._name = 'temporal_network'
+        self.chords_tempNetwork.name = 'temporal_network'
         chords_over_time = self.chords_tempNetwork(chords_input) # [n_bars, z_dim]
         
         # MELODY -> TEMPORAL NETWORK
@@ -263,13 +248,13 @@ class MuseGAN():
 
 
 
-    def get_opti(self, learning_rate):
+    def get_opti(self, lr):
         if self.optimiser == 'adam':
-            opti = Adam(learning_rate=learning_rate, beta_1=0.5, beta_2 = 0.9)
+            opti = Adam(lr=lr, beta_1=0.5, beta_2 = 0.9)
         elif self.optimiser == 'rmsprop':
-            opti = RMSprop(learning_rate=learning_rate)
+            opti = RMSprop(lr=lr)
         else:
-            opti = Adam(learning_rate=learning_rate)
+            opti = Adam(lr=lr)
 
         return opti
 
@@ -418,11 +403,11 @@ class MuseGAN():
                 
                 self.critic.save_weights(os.path.join(run_folder, 'weights/weights-c.h5'))
 
-#                with open(os.path.join(run_folder,"generator.json", "w") as json_file:
-#                    json_file.write(self.generator.to_json())
-
-#                with open(os.path.join(run_folder,"critic.json", "w") as json_file:
-#                    json_file.write(self.critic.to_json())
+                # with open(os.path.join(run_folder,"generator.json", "w") as json_file:
+                #     json_file.write(self.generator.to_json())
+                
+                # with open(os.path.join(run_folder,"critic.json", "w") as json_file:
+                #     json_file.write(self.critic.to_json())
 
                 self.save_model(run_folder)
 
@@ -456,7 +441,6 @@ class MuseGAN():
 
         return max_pitches
 
-    
     def notes_to_midi(self, run_folder, output, filename = None):
 
         for score_num in range(len(output)):
@@ -470,7 +454,8 @@ class MuseGAN():
             for i in range(self.n_tracks):
                 last_x = int(midi_note_score[:,i][0])
                 s= stream.Part()
-                dur = 0               
+                dur = 0
+                
 
                 for idx, x in enumerate(midi_note_score[:, i]):
                     x = int(x)
@@ -489,71 +474,19 @@ class MuseGAN():
                 s.append(n)
                 
                 parts.append(s)
-  
+
             if filename is None:
-                filepath=os.path.join(run_folder, "samples/sample_{}_{}.midi".format(self.epoch, score_num))
+                parts.write('midi', fp=os.path.join(run_folder, "samples/sample_{}_{}.midi".format(self.epoch, score_num)))
             else:
-                filepath=os.path.join(run_folder, "samples/{}.midi".format(filename))
-                
-            parts.write('midi', filepath)
-            
-            return filepath
-    
-#    def notes_to_mp3(self, run_folder, output, filename = None):
-#
-#        for score_num in range(len(output)):
-#
-#            max_pitches = self.binarise_output(output)
-#
-#            midi_note_score = max_pitches[score_num].reshape([self.n_bars * self.n_steps_per_bar, self.n_tracks])
-#            parts = stream.Score()
-#            parts.append(tempo.MetronomeMark(number= 66))
-#
-#            for i in range(self.n_tracks):
-#                last_x = int(midi_note_score[:,i][0])
-#                s= stream.Part()
-#                dur = 0               
-#
-#                for idx, x in enumerate(midi_note_score[:, i]):
-#                    x = int(x)
-#                
-#                    if (x != last_x or idx % 4 == 0) and idx > 0:
-#                        n = note.Note(last_x)
-#                        n.duration = duration.Duration(dur)
-#                        s.append(n)
-#                        dur = 0
-#
-#                    last_x = x
-#                    dur = dur + 0.25
-#                
-#                n = note.Note(last_x)
-#                n.duration = duration.Duration(dur)
-#                s.append(n)
-#                
-#                parts.append(s)
-#  
-#            if filename is None:
-#                filepath=os.path.join(run_folder, "samples/sample_{}_{}.mp3".format(self.epoch, score_num))
-#            else:
-#                filepath=os.path.join(run_folder, "samples/{}.mp3".format(filename))
-#                
-#            parts.write('mp3', filepath)
-#            
-#            return filepath
-#        
-#    def fetch_midi(self, run_folder, filename):
-#        mf = midi.MidiFile()
-#        fpath = fp=os.path.join(run_folder, "samples/{}.midi".format(filename))
-#        mf.open(fpath)
-#        mf.read() 
-#        mf.close()
-#        return mf
-    
-        
+                parts.write('midi', fp=os.path.join(run_folder, "samples/{}.midi".format(filename)))
+
+
     def plot_model(self, run_folder):
         plot_model(self.model, to_file=os.path.join(run_folder ,'viz/model.png'), show_shapes = True, show_layer_names = True)
         plot_model(self.critic, to_file=os.path.join(run_folder ,'viz/critic.png'), show_shapes = True, show_layer_names = True)
         plot_model(self.generator, to_file=os.path.join(run_folder ,'viz/generator.png'), show_shapes = True, show_layer_names = True)
+
+
 
             
     def save(self, folder):
@@ -579,7 +512,7 @@ class MuseGAN():
         self.model.save(os.path.join(run_folder, 'model.h5'))
         self.critic.save(os.path.join(run_folder, 'critic.h5'))
         self.generator.save(os.path.join(run_folder, 'generator.h5'))
-        pickle.dump(self, open( os.path.join(run_folder, "obj.pkl"), "wb" ))
+        # pickle.dump(self, open( os.path.join(run_folder, "obj.pkl"), "wb" ))
 
     def load_weights(self, run_folder, epoch=None):
 
@@ -596,6 +529,7 @@ class MuseGAN():
         plt.imshow(data[score_num,bar,:,:,part].transpose([1,0]), origin='lower', cmap = 'Greys', vmin=-1, vmax=1)
 
     def draw_score(self, data, score_num):
+
 
         fig, axes = plt.subplots(ncols=self.n_bars, nrows=self.n_tracks,figsize=(12,8), sharey = True, sharex = True)
         fig.subplots_adjust(0,0,0.2,1.5,0,0)
